@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { resizeImageFile } from '../lib/resize';
 import {
   Select,
   SelectContent,
@@ -49,16 +50,18 @@ export function ImageControls({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imgElement, setImgElement] = useState<HTMLImageElement | null>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          onImageChange(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        // Shrink the image to a max width of 600px before the app processes it
+        const safeImage = await resizeImageFile(file, 600);
+        
+        // Pass the safe, compressed image back to your app
+        onImageChange(safeImage);
+      } catch (error) {
+        console.error("Error resizing image:", error);
+      }
     }
   };
 
