@@ -14,7 +14,7 @@ interface CombineStylesProps {
     styleImg2: HTMLImageElement,
     combinationRatio: number,
     contentDim: number,
-    styleDim: number
+    styleDim: number,
   ) => Promise<ImageData>;
   onOutputGenerated: (imageData: ImageData) => void;
   isProcessing: boolean;  
