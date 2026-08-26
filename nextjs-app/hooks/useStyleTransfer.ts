@@ -19,15 +19,28 @@ export interface UseStyleTransferReturn {
   stylizeImage: (
     contentImg: HTMLImageElement,
     styleImg: HTMLImageElement,
-    styleRatio: number
+    styleRatio: number,
+    contentDim?: number,
+    styleDim?: number
   ) => Promise<ImageData>;
   combineStyles: (
     contentImg: HTMLImageElement,
     styleImg1: HTMLImageElement,
     styleImg2: HTMLImageElement,
-    combinationRatio: number
+    combinationRatio: number,
+    contentDim?: number,
+    styleDim?: number
   ) => Promise<ImageData>;
   progress: string;
+}
+
+function resizeImageToCanvas(img: HTMLImageElement, maxDim: number): HTMLCanvasElement {
+  const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas;
 }
 
 export function useStyleTransfer(): UseStyleTransferReturn {
@@ -145,83 +158,88 @@ export function useStyleTransfer(): UseStyleTransferReturn {
   const stylizeImage = useCallback(async (
     contentImg: HTMLImageElement,
     styleImg: HTMLImageElement,
-    styleRatio: number = 1.0
+    styleRatio: number = 1.0,
+    contentDim: number = 256,
+    styleDim: number = 256
   ): Promise<ImageData> => {
     if (!models.styleNet || !models.transformNet) {
       throw new Error('Models not loaded');
     }
+
+    const contentCanvas = resizeImageToCanvas(contentImg, contentDim);
+    const styleCanvas = resizeImageToCanvas(styleImg, styleDim);
 
     try {
       setProgress('Generating style representation...');
       await tf.nextFrame();
 
       // Generate style bottleneck
-      let bottleneck = await tf.tidy(() => {
+      let bottleneck = tf.tidy(() => {
         return models.styleNet!.predict(
-          tf.browser.fromPixels(styleImg)
+          tf.browser.fromPixels(styleCanvas)
             .toFloat()
             .div(tf.scalar(255))
             .expandDims()
         ) as tf.Tensor;
       });
 
-    // If styleRatio is not 1.0, blend with content's style
-    if (styleRatio !== 1.0) {
-      setProgress('Blending styles...');
+      // If styleRatio is not 1.0, blend with content's style
+      if (styleRatio !== 1.0) {
+        setProgress('Blending styles...');
+        await tf.nextFrame();
+        
+        const identityBottleneck = tf.tidy(() => {
+          return models.styleNet!.predict(
+            tf.browser.fromPixels(contentCanvas)
+              .toFloat()
+              .div(tf.scalar(255))
+              .expandDims()
+          ) as tf.Tensor;
+        });
+
+        const styleBottleneck = bottleneck;
+        bottleneck = tf.tidy(() => {
+          const styleBottleneckScaled = styleBottleneck.mul(tf.scalar(styleRatio));
+          const identityBottleneckScaled = identityBottleneck.mul(tf.scalar(1.0 - styleRatio));
+          return styleBottleneckScaled.add(identityBottleneckScaled);
+        });
+
+        styleBottleneck.dispose();
+        identityBottleneck.dispose();
+      }
+
+      setProgress('Stylizing image...');
       await tf.nextFrame();
-      
-      const identityBottleneck = await tf.tidy(() => {
-        return models.styleNet!.predict(
-          tf.browser.fromPixels(contentImg)
-            .toFloat()
-            .div(tf.scalar(255))
-            .expandDims()
-        ) as tf.Tensor;
+
+      // Transform the content image with the style
+      const stylized = tf.tidy(() => {
+        const contentTensor = tf.browser.fromPixels(contentCanvas)
+          .toFloat()
+          .div(tf.scalar(255))
+          .expandDims();
+        
+        // The transformer expects an array of [contentImage, styleBottleneck]
+        const result = models.transformNet!.predict([contentTensor, bottleneck]) as tf.Tensor;
+        
+        // Clamp values between 0 and 1
+        return tf.clipByValue(result.squeeze(), 0, 1) as tf.Tensor3D;
       });
 
-      const styleBottleneck = bottleneck;
-      bottleneck = await tf.tidy(() => {
-        const styleBottleneckScaled = styleBottleneck.mul(tf.scalar(styleRatio));
-        const identityBottleneckScaled = identityBottleneck.mul(tf.scalar(1.0 - styleRatio));
-        return styleBottleneckScaled.add(identityBottleneckScaled);
-      });
-
-      styleBottleneck.dispose();
-      identityBottleneck.dispose();
-    }
-
-    setProgress('Stylizing image...');
-    await tf.nextFrame();
-
-    // Transform the content image with the style
-    const stylized = await tf.tidy(() => {
-      const contentTensor = tf.browser.fromPixels(contentImg)
-        .toFloat()
-        .div(tf.scalar(255))
-        .expandDims();
+      // Convert to ImageData
+      const imageData = await tf.browser.toPixels(stylized);
+      const width = stylized.shape[1];
+      const height = stylized.shape[0];
       
-      // The transformer expects an array of [contentImage, styleBottleneck]
-      const result = models.transformNet!.predict([contentTensor, bottleneck]) as tf.Tensor;
-      
-      // Clamp values between 0 and 1
-      return tf.clipByValue(result.squeeze(), 0, 1) as tf.Tensor3D;
-    });
+      // Cleanup
+      bottleneck.dispose();
+      stylized.dispose();
 
-    // Convert to ImageData
-    const imageData = await tf.browser.toPixels(stylized);
-    const width = stylized.shape[1];
-    const height = stylized.shape[0];
-    
-    // Cleanup
-    bottleneck.dispose();
-    stylized.dispose();
-
-    setProgress('');
-    return new ImageData(
-      new Uint8ClampedArray(imageData),
-      width,
-      height
-    );
+      setProgress('');
+      return new ImageData(
+        new Uint8ClampedArray(imageData),
+        width,
+        height
+      );
     } catch (err) {
       setProgress('');
       console.error('Stylization error:', err);
@@ -233,77 +251,83 @@ export function useStyleTransfer(): UseStyleTransferReturn {
     contentImg: HTMLImageElement,
     styleImg1: HTMLImageElement,
     styleImg2: HTMLImageElement,
-    combinationRatio: number = 0.5
+    combinationRatio: number = 0.5,
+    contentDim: number = 256,
+    styleDim: number = 256
   ): Promise<ImageData> => {
     if (!models.styleNet || !models.transformNet) {
       throw new Error('Models not loaded');
     }
 
+    const contentCanvas = resizeImageToCanvas(contentImg, contentDim);
+    const styleCanvas1 = resizeImageToCanvas(styleImg1, styleDim);
+    const styleCanvas2 = resizeImageToCanvas(styleImg2, styleDim);
+
     try {
       setProgress('Generating style representation for style A...');
       await tf.nextFrame();
 
-    const bottleneck1 = await tf.tidy(() => {
-      return models.styleNet!.predict(
-        tf.browser.fromPixels(styleImg1)
+      const bottleneck1 = tf.tidy(() => {
+        return models.styleNet!.predict(
+          tf.browser.fromPixels(styleCanvas1)
+            .toFloat()
+            .div(tf.scalar(255))
+            .expandDims()
+        ) as tf.Tensor;
+      });
+
+      setProgress('Generating style representation for style B...');
+      await tf.nextFrame();
+
+      const bottleneck2 = tf.tidy(() => {
+        return models.styleNet!.predict(
+          tf.browser.fromPixels(styleCanvas2)
+            .toFloat()
+            .div(tf.scalar(255))
+            .expandDims()
+        ) as tf.Tensor;
+      });
+
+      setProgress('Combining styles...');
+      await tf.nextFrame();
+
+      const combinedBottleneck = tf.tidy(() => {
+        const scaledBottleneck1 = bottleneck1.mul(tf.scalar(1 - combinationRatio));
+        const scaledBottleneck2 = bottleneck2.mul(tf.scalar(combinationRatio));
+        return scaledBottleneck1.add(scaledBottleneck2);
+      });
+
+      setProgress('Stylizing image...');
+      await tf.nextFrame();
+
+      const stylized = tf.tidy(() => {
+        const contentTensor = tf.browser.fromPixels(contentCanvas)
           .toFloat()
           .div(tf.scalar(255))
-          .expandDims()
-      ) as tf.Tensor;
-    });
+          .expandDims();
+        
+        const result = models.transformNet!.predict([contentTensor, combinedBottleneck]) as tf.Tensor;
+        
+        // Clamp values between 0 and 1
+        return tf.clipByValue(result.squeeze(), 0, 1) as tf.Tensor3D;
+      });
 
-    setProgress('Generating style representation for style B...');
-    await tf.nextFrame();
+      const imageData = await tf.browser.toPixels(stylized);
+      const width = stylized.shape[1];
+      const height = stylized.shape[0];
 
-    const bottleneck2 = await tf.tidy(() => {
-      return models.styleNet!.predict(
-        tf.browser.fromPixels(styleImg2)
-          .toFloat()
-          .div(tf.scalar(255))
-          .expandDims()
-      ) as tf.Tensor;
-    });
+      // Cleanup
+      bottleneck1.dispose();
+      bottleneck2.dispose();
+      combinedBottleneck.dispose();
+      stylized.dispose();
 
-    setProgress('Combining styles...');
-    await tf.nextFrame();
-
-    const combinedBottleneck = await tf.tidy(() => {
-      const scaledBottleneck1 = bottleneck1.mul(tf.scalar(1 - combinationRatio));
-      const scaledBottleneck2 = bottleneck2.mul(tf.scalar(combinationRatio));
-      return scaledBottleneck1.add(scaledBottleneck2);
-    });
-
-    setProgress('Stylizing image...');
-    await tf.nextFrame();
-
-    const stylized = await tf.tidy(() => {
-      const contentTensor = tf.browser.fromPixels(contentImg)
-        .toFloat()
-        .div(tf.scalar(255))
-        .expandDims();
-      
-      const result = models.transformNet!.predict([contentTensor, combinedBottleneck]) as tf.Tensor;
-      
-      // Clamp values between 0 and 1
-      return tf.clipByValue(result.squeeze(), 0, 1) as tf.Tensor3D;
-    });
-
-    const imageData = await tf.browser.toPixels(stylized);
-    const width = stylized.shape[1];
-    const height = stylized.shape[0];
-
-    // Cleanup
-    bottleneck1.dispose();
-    bottleneck2.dispose();
-    combinedBottleneck.dispose();
-    stylized.dispose();
-
-    setProgress('');
-    return new ImageData(
-      new Uint8ClampedArray(imageData),
-      width,
-      height
-    );
+      setProgress('');
+      return new ImageData(
+        new Uint8ClampedArray(imageData),
+        width,
+        height
+      );
     } catch (err) {
       setProgress('');
       console.error('Style combination error:', err);
