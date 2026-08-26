@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
@@ -12,7 +12,9 @@ interface CombineStylesProps {
     contentImg: HTMLImageElement,
     styleImg1: HTMLImageElement,
     styleImg2: HTMLImageElement,
-    combinationRatio: number
+    combinationRatio: number,
+    contentDim: number,
+    styleDim: number
   ) => Promise<ImageData>;
   onOutputGenerated: (imageData: ImageData) => void;
   isProcessing: boolean;
@@ -55,6 +57,8 @@ export function CombineStyles({
   const [style2Size, setStyle2Size] = useState(256);
   
   const [combinationRatio, setCombinationRatio] = useState(50);
+  const [hasOutput, setHasOutput] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const contentImgElement = useImageElement(contentSrc);
   const styleImg1Element = useImageElement(style1Src);
@@ -71,13 +75,35 @@ export function CombineStyles({
         contentImgElement,
         styleImg1Element,
         styleImg2Element,
-        combinationRatio / 100
+        combinationRatio / 100,
+        contentSize,
+        Math.max(style1Size, style2Size)
       );
       onOutputGenerated(result);
     } catch (error) {
       console.error('Combination error:', error);
       alert('Error during stylization. Please try again.');
     }
+  };
+
+  // Real-time auto-restylize on slider/image changes after first manual generation
+  useEffect(() => {
+    if (!hasOutput || isProcessing) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    debounceRef.current = setTimeout(() => {
+      handleCombine();
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentSize, style1Size, style2Size, combinationRatio, contentSrc, style1Src, style2Src]);
+
+  const handleCombineClick = async () => {
+    await handleCombine();
+    setHasOutput(true);
   };
 
   const handleRandomize = () => {
@@ -148,7 +174,7 @@ export function CombineStyles({
 
       <div className="flex gap-3 pt-2">
         <Button
-          onClick={handleCombine}
+          onClick={handleCombineClick}
           disabled={isProcessing || !contentImgElement || !styleImg1Element || !styleImg2Element}
           className="flex-1 bg-foreground text-background hover:bg-foreground/90"
           size="lg"
