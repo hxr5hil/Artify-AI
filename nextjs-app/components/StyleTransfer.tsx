@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
@@ -11,9 +11,11 @@ interface StyleTransferProps {
   onStylize: (
     contentImg: HTMLImageElement,
     styleImg: HTMLImageElement,
-    styleRatio: number
+    styleRatio: number,
+    contentDim: number,
+    styleDim: number
   ) => Promise<ImageData>;
-  onOutputGenerated: (imageData: ImageData) => void; // We added this!
+  onOutputGenerated: (imageData: ImageData) => void;
   isProcessing: boolean;
   progress: string;
 }
@@ -51,6 +53,9 @@ export function StyleTransfer({
   const [styleSize, setStyleSize] = useState(256);
   const [styleRatio, setStyleRatio] = useState(100);
 
+  const [hasOutput, setHasOutput] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
   const contentImgElement = useImageElement(contentSrc);
   const styleImgElement = useImageElement(styleSrc);
 
@@ -64,14 +69,35 @@ export function StyleTransfer({
       const result = await onStylize(
         contentImgElement,
         styleImgElement,
-        styleRatio / 100
+        styleRatio / 100,
+        contentSize,
+        styleSize
       );
-      // Instead of saving it here, we pass it up to the parent layout
       onOutputGenerated(result);
     } catch (error) {
       console.error('Stylization error:', error);
       alert('Error during stylization. Please try again.');
     }
+  };
+
+  // Real-time auto-restylize on slider changes after the first manual generation
+  useEffect(() => {
+    if (!hasOutput || isProcessing) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    
+    debounceRef.current = setTimeout(() => {
+      handleStylize();
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentSize, styleSize, styleRatio, contentSrc, styleSrc]);
+
+  const handleStylizeClick = async () => {
+    await handleStylize();
+    setHasOutput(true);
   };
 
   const handleRandomize = () => {
@@ -82,7 +108,6 @@ export function StyleTransfer({
 
   return (
     <div className="space-y-6 flex flex-col">
-      {/* Changed to 1 column so it fits nicely in the sidebar */}
       <div className="grid grid-cols-1 gap-6">
         <ImageControls
           label="Content"
@@ -111,8 +136,8 @@ export function StyleTransfer({
 
       <div className="space-y-3 pt-4 border-t border-border">
         <div className="flex items-center justify-between">
-          <Label className="text font-medium">Stylization strength</Label>
-          <span className="text-sm text-muted-foreground">{styleRatio}%</span>
+          <Label className="text-base font-medium">Stylization strength</Label>
+          <span className="text-base text-muted-foreground">{styleRatio}%</span>
         </div>
         <Slider
           value={[styleRatio]}
@@ -126,14 +151,13 @@ export function StyleTransfer({
 
       <div className="flex gap-3 pt-2">
         <Button
-          onClick={handleStylize}
+          onClick={handleStylizeClick}
           disabled={isProcessing || !contentImgElement || !styleImgElement}
-          className="flex-1 bg-foreground text-background hover:bg-foreground/90"
-          size="lg"
+          className="flex-1 bg-foreground text-background hover:bg-foreground/90 text-base font-semibold py-6"
         >
           {isProcessing ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               {progress || 'Processing...'}
             </>
           ) : (
@@ -143,10 +167,12 @@ export function StyleTransfer({
         <Button
           onClick={handleRandomize}
           variant="outline"
-          size="lg"
+          size="icon"
+          className="h-auto px-4"
           disabled={isProcessing}
+          title="Randomize parameters"
         >
-          <Shuffle className="h-4 w-4" />
+          <Shuffle className="h-5 w-5" />
         </Button>
       </div>
     </div>
