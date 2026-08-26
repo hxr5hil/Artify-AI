@@ -56,13 +56,20 @@ export function ImageControls({
         <Label className="text-base font-semibold">{label} Image</Label>
       </div>
 
-      <div className="relative w-full aspect-square bg-muted rounded-md overflow-hidden border border-border">
+      {/* Real-time scaling preview container */}
+      <div className="relative w-full aspect-square bg-muted rounded-md overflow-hidden border border-border flex items-center justify-center">
         <img
           src={imageSrc}
           alt={label}
-          className="w-full h-full object-cover"
+          style={{ 
+            transform: `scale(${Math.min(1 + (imageSize - minSize) / (maxSize - minSize) * 0.15, 1.15)})` 
+          }}
+          className="w-full h-full object-cover transition-transform duration-75 ease-out"
           crossOrigin="anonymous"
         />
+        <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono pointer-events-none">
+          {imageSize}px
+        </span>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">

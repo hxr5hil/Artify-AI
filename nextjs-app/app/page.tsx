@@ -12,7 +12,6 @@ import {
 import { StyleTransfer } from '@/components/StyleTransfer';
 import { CombineStyles } from '@/components/CombineStyles';
 import { useStyleTransfer, StyleModelType, TransformerModelType } from '@/hooks/useStyleTransfer';
-// WE RENAMED GITHUB HERE TO BREAK THE CACHE:
 import { Github as GithubIcon, Sparkles, Palette, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -59,11 +58,17 @@ export default function Home() {
   const handleStylize = async (
     contentImg: HTMLImageElement,
     styleImg: HTMLImageElement,
-    styleRatio: number
+    styleRatio: number,
+    contentDim: number,
+    styleDim: number
   ) => {
     setIsProcessing(true);
+    // Force the browser to render the loading state on the screen
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     try {
-      return await stylizeImage(contentImg, styleImg, styleRatio);
+      return await stylizeImage(contentImg, styleImg, styleRatio, contentDim, styleDim);
     } finally {
       setIsProcessing(false);
     }
@@ -76,6 +81,10 @@ export default function Home() {
     combinationRatio: number
   ) => {
     setIsProcessing(true);
+    // Force the browser to render the loading state on the screen
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     try {
       return await combineStyles(contentImg, styleImg1, styleImg2, combinationRatio);
     } finally {
