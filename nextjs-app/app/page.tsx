@@ -74,11 +74,14 @@ export default function Home() {
     }
   };
 
+  // FIX IS HERE: Added contentDim and styleDim
   const handleCombine = async (
     contentImg: HTMLImageElement,
     styleImg1: HTMLImageElement,
     styleImg2: HTMLImageElement,
-    combinationRatio: number
+    combinationRatio: number,
+    contentDim: number,
+    styleDim: number
   ) => {
     setIsProcessing(true);
     // Force the browser to render the loading state on the screen
@@ -86,7 +89,8 @@ export default function Home() {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
-      return await combineStyles(contentImg, styleImg1, styleImg2, combinationRatio);
+      // FIX IS HERE: Passing them to combineStyles
+      return await combineStyles(contentImg, styleImg1, styleImg2, combinationRatio, contentDim, styleDim);
     } finally {
       setIsProcessing(false);
     }
