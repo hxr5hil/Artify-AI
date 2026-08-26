@@ -13,18 +13,25 @@ export default function Icon() {
     (
       <div
         style={{
-          fontSize: 24,
-          background: 'linear-gradient(to bottom right, #3b82f6, #8b5cf6)',
+          fontSize: 18,
+          /* Matching the Indigo -> Purple -> Pink gradient from your header */
+          background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
           width: '100%',
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: 'white',
-          borderRadius: '20%',
+          /* Making it a perfect circle to match the orb */
+          borderRadius: '50%',
+          /* Adding a subtle white top-border to fake a 3D light reflection */
+          borderTop: '1px solid rgba(255, 255, 255, 0.8)',
+          borderLeft: '1px solid rgba(255, 255, 255, 0.4)',
+          borderBottom: '1px solid rgba(0, 0, 0, 0.3)',
+          borderRight: '1px solid rgba(0, 0, 0, 0.3)',
         }}
       >
-        🎨
+        ✨
       </div>
     ),
     {

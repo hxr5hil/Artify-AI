@@ -1,19 +1,11 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { Card, CardContent } from '@/components/ui/card';
 import { Shuffle, Loader2 } from 'lucide-react';
 import { ImageControls, useImageElement } from './ImageControls';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface CombineStylesProps {
   onCombine: (
@@ -22,24 +14,25 @@ interface CombineStylesProps {
     styleImg2: HTMLImageElement,
     combinationRatio: number
   ) => Promise<ImageData>;
+  onOutputGenerated: (imageData: ImageData) => void;
   isProcessing: boolean;
   progress: string;
 }
 
 const CONTENT_IMAGES = [
-  { value: 'statue_of_liberty', label: 'Statue of Liberty' },
   { value: 'chicago', label: 'Chicago' },
   { value: 'golden_gate', label: 'Golden Gate' },
   { value: 'stata', label: 'Stata' },
   { value: 'diana', label: 'Diana' },
   { value: 'beach', label: 'Beach' },
+  { value: 'statue_of_liberty', label: 'Statue of Liberty' },
 ];
 
 const STYLE_IMAGES = [
-  { value: 'stripes', label: 'Stripes' },
-  { value: 'bricks', label: 'Bricks' },
   { value: 'seaport', label: 'Seaport' },
   { value: 'udnie', label: 'Udnie' },
+  { value: 'stripes', label: 'Stripes' },
+  { value: 'bricks', label: 'Bricks' },
   { value: 'clouds', label: 'Clouds' },
   { value: 'towers', label: 'Towers' },
   { value: 'sketch', label: 'Sketch' },
@@ -47,34 +40,28 @@ const STYLE_IMAGES = [
   { value: 'zigzag', label: 'Zigzag' },
 ];
 
-export function CombineStyles({ onCombine, isProcessing, progress }: CombineStylesProps) {
-  const [style1Src, setStyle1Src] = useState('/images/stripes.jpg');
-  const [style2Src, setStyle2Src] = useState('/images/bricks.jpg');
-  const [contentSrc, setContentSrc] = useState('/images/statue_of_liberty.jpg');
+export function CombineStyles({
+  onCombine,
+  onOutputGenerated,
+  isProcessing,
+  progress,
+}: CombineStylesProps) {
+  const [contentSrc, setContentSrc] = useState('/images/chicago.jpg');
+  const [style1Src, setStyle1Src] = useState('/images/seaport.jpg');
+  const [style2Src, setStyle2Src] = useState('/images/udnie.jpg');
+  
+  const [contentSize, setContentSize] = useState(256);
   const [style1Size, setStyle1Size] = useState(256);
   const [style2Size, setStyle2Size] = useState(256);
-  const [contentSize, setContentSize] = useState(256);
+  
   const [combinationRatio, setCombinationRatio] = useState(50);
-  const [outputImage, setOutputImage] = useState<ImageData | null>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const contentImgElement = useImageElement(contentSrc);
-  const style1ImgElement = useImageElement(style1Src);
-  const style2ImgElement = useImageElement(style2Src);
-
-  useEffect(() => {
-    if (outputImage && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        canvasRef.current.width = outputImage.width;
-        canvasRef.current.height = outputImage.height;
-        ctx.putImageData(outputImage, 0, 0);
-      }
-    }
-  }, [outputImage]);
+  const styleImg1Element = useImageElement(style1Src);
+  const styleImg2Element = useImageElement(style2Src);
 
   const handleCombine = async () => {
-    if (!contentImgElement || !style1ImgElement || !style2ImgElement) {
+    if (!contentImgElement || !styleImg1Element || !styleImg2Element) {
       alert('Please wait for images to load');
       return;
     }
@@ -82,58 +69,27 @@ export function CombineStyles({ onCombine, isProcessing, progress }: CombineStyl
     try {
       const result = await onCombine(
         contentImgElement,
-        style1ImgElement,
-        style2ImgElement,
+        styleImg1Element,
+        styleImg2Element,
         combinationRatio / 100
       );
-      setOutputImage(result);
+      onOutputGenerated(result);
     } catch (error) {
-      console.error('Style combination error:', error);
-      alert('Error during style combination. Please try again.');
+      console.error('Combination error:', error);
+      alert('Error during stylization. Please try again.');
     }
   };
 
   const handleRandomize = () => {
+    setContentSize(Math.floor(Math.random() * (400 - 256 + 1)) + 256);
     setStyle1Size(Math.floor(Math.random() * (400 - 100 + 1)) + 100);
     setStyle2Size(Math.floor(Math.random() * (400 - 100 + 1)) + 100);
-    setContentSize(Math.floor(Math.random() * (400 - 256 + 1)) + 256);
     setCombinationRatio(Math.floor(Math.random() * 101));
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-6"
-    >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <ImageControls
-          label="Style A"
-          imageSrc={style1Src}
-          onImageChange={setStyle1Src}
-          imageSize={style1Size}
-          onSizeChange={setStyle1Size}
-          minSize={100}
-          maxSize={400}
-          tooltip="Changing the size of a style image usually affects the texture seen by the network."
-          presetImages={STYLE_IMAGES}
-        />
-
-        <ImageControls
-          label="Style B"
-          imageSrc={style2Src}
-          onImageChange={setStyle2Src}
-          imageSize={style2Size}
-          onSizeChange={setStyle2Size}
-          minSize={100}
-          maxSize={400}
-          tooltip="Changing the size of a style image usually affects the texture seen by the network."
-          presetImages={STYLE_IMAGES}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-6 flex flex-col">
+      <div className="grid grid-cols-1 gap-6">
         <ImageControls
           label="Content"
           imageSrc={contentSrc}
@@ -142,86 +98,59 @@ export function CombineStyles({ onCombine, isProcessing, progress }: CombineStyl
           onSizeChange={setContentSize}
           minSize={256}
           maxSize={400}
-          tooltip="A bigger content image results in a more detailed output, but increases processing time significantly."
+          tooltip="Larger images give more detail but take longer to process."
           presetImages={CONTENT_IMAGES}
         />
 
-        {outputImage ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-          >
-          <Card className="backdrop-blur-sm bg-card/50 overflow-hidden border-2 border-primary/20">
-          <CardContent className="p-6 space-y-4">
-            <div className="relative aspect-square bg-gradient-to-br from-muted to-muted/50 rounded-lg overflow-hidden flex items-center justify-center">
-              <canvas
-                ref={canvasRef}
-                className="max-w-full max-h-full object-contain"
-              />
-            </div>
-          </CardContent>
-        </Card>
-          </motion.div>
-        ) : (
-          <Card className="backdrop-blur-sm bg-card/50">
-          <CardContent className="p-6 space-y-4">
-            <div className="aspect-square bg-gradient-to-br from-muted/50 to-transparent rounded-lg overflow-hidden flex items-center justify-center border-2 border-dashed border-muted-foreground/20">
-              <p className="text-muted-foreground text-center p-4">
-                Combined style result will appear here
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        )}
+        <div className="grid grid-cols-2 gap-4">
+          <ImageControls
+            label="Style 1"
+            imageSrc={style1Src}
+            onImageChange={setStyle1Src}
+            imageSize={style1Size}
+            onSizeChange={setStyle1Size}
+            minSize={100}
+            maxSize={400}
+            presetImages={STYLE_IMAGES}
+          />
+
+          <ImageControls
+            label="Style 2"
+            imageSrc={style2Src}
+            onImageChange={setStyle2Src}
+            imageSize={style2Size}
+            onSizeChange={setStyle2Size}
+            minSize={100}
+            maxSize={400}
+            presetImages={STYLE_IMAGES}
+          />
+        </div>
       </div>
 
-      <div className="space-y-6">
-        <Card className="backdrop-blur-sm bg-card/50">
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Style ratio (A ← → B)</Label>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-xs text-muted-foreground cursor-help">
-                        {combinationRatio}%
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        This parameter affects the strength of the two styles relative to
-                        each other. This is done via interpolation between the style vectors
-                        of the two style images.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <Slider
-                value={[combinationRatio]}
-                onValueChange={(values) => setCombinationRatio(values[0])}
-                min={0}
-                max={100}
-                step={1}
-                className="w-full"
-              />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-3 pt-4 border-t border-border">
+        <div className="flex items-center justify-between">
+          <Label className="text-base font-medium">Style Blend</Label>
+          <span className="text-base text-muted-foreground">{combinationRatio}% Style 2</span>
+        </div>
+        <Slider
+          value={[combinationRatio]}
+          onValueChange={(values) => setCombinationRatio(values[0])}
+          min={0}
+          max={100}
+          step={1}
+          className="w-full"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>More Style 1</span>
+          <span>More Style 2</span>
+        </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-2">
         <Button
           onClick={handleCombine}
-          disabled={
-            isProcessing ||
-            !contentImgElement ||
-            !style1ImgElement ||
-            !style2ImgElement
-          }
-          className="flex-1"
+          disabled={isProcessing || !contentImgElement || !styleImg1Element || !styleImg2Element}
+          className="flex-1 bg-foreground text-background hover:bg-foreground/90"
           size="lg"
         >
           {isProcessing ? (
@@ -242,6 +171,6 @@ export function CombineStyles({ onCombine, isProcessing, progress }: CombineStyl
           <Shuffle className="h-4 w-4" />
         </Button>
       </div>
-    </motion.div>
+    </div>
   );
 }

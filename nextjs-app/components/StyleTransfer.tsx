@@ -1,19 +1,11 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-import { Card, CardContent } from '@/components/ui/card';
 import { Shuffle, Loader2 } from 'lucide-react';
 import { ImageControls, useImageElement } from './ImageControls';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 
 interface StyleTransferProps {
   onStylize: (
@@ -21,6 +13,7 @@ interface StyleTransferProps {
     styleImg: HTMLImageElement,
     styleRatio: number
   ) => Promise<ImageData>;
+  onOutputGenerated: (imageData: ImageData) => void; // We added this!
   isProcessing: boolean;
   progress: string;
 }
@@ -46,28 +39,20 @@ const STYLE_IMAGES = [
   { value: 'zigzag', label: 'Zigzag' },
 ];
 
-export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransferProps) {
+export function StyleTransfer({ 
+  onStylize, 
+  onOutputGenerated, 
+  isProcessing, 
+  progress 
+}: StyleTransferProps) {
   const [contentSrc, setContentSrc] = useState('/images/chicago.jpg');
   const [styleSrc, setStyleSrc] = useState('/images/seaport.jpg');
   const [contentSize, setContentSize] = useState(256);
   const [styleSize, setStyleSize] = useState(256);
   const [styleRatio, setStyleRatio] = useState(100);
-  const [outputImage, setOutputImage] = useState<ImageData | null>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const contentImgElement = useImageElement(contentSrc);
   const styleImgElement = useImageElement(styleSrc);
-
-  useEffect(() => {
-    if (outputImage && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        canvasRef.current.width = outputImage.width;
-        canvasRef.current.height = outputImage.height;
-        ctx.putImageData(outputImage, 0, 0);
-      }
-    }
-  }, [outputImage]);
 
   const handleStylize = async () => {
     if (!contentImgElement || !styleImgElement) {
@@ -81,7 +66,8 @@ export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransf
         styleImgElement,
         styleRatio / 100
       );
-      setOutputImage(result);
+      // Instead of saving it here, we pass it up to the parent layout
+      onOutputGenerated(result);
     } catch (error) {
       console.error('Stylization error:', error);
       alert('Error during stylization. Please try again.');
@@ -95,13 +81,9 @@ export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransf
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-6"
-    >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-6 flex flex-col">
+      {/* Changed to 1 column so it fits nicely in the sidebar */}
+      <div className="grid grid-cols-1 gap-6">
         <ImageControls
           label="Content"
           imageSrc={contentSrc}
@@ -110,7 +92,7 @@ export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransf
           onSizeChange={setContentSize}
           minSize={256}
           maxSize={400}
-          tooltip="A bigger content image results in a more detailed output, but increases processing time significantly."
+          tooltip="Larger images give more detail but take longer to process."
           presetImages={CONTENT_IMAGES}
         />
 
@@ -122,104 +104,31 @@ export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransf
           onSizeChange={setStyleSize}
           minSize={100}
           maxSize={400}
-          tooltip="Changing the size of a style image usually affects the texture seen by the network."
+          tooltip="Changing size affects the texture seen by the network."
           presetImages={STYLE_IMAGES}
         />
       </div>
 
-      {/* Output */}
-      {outputImage ? (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-        <Card className="backdrop-blur-sm bg-card/50 overflow-hidden border-2 border-primary/20">
-        <CardContent className="p-6 space-y-4">
-          <div className="relative aspect-video bg-gradient-to-br from-muted to-muted/50 rounded-lg overflow-hidden flex items-center justify-center">
-            <canvas
-              ref={canvasRef}
-              className="max-w-full max-h-full object-contain"
-            />
-          </div>
+      <div className="space-y-3 pt-4 border-t border-border">
+        <div className="flex items-center justify-between">
+          <Label className="text font-medium">Stylization strength</Label>
+          <span className="text-sm text-muted-foreground">{styleRatio}%</span>
+        </div>
+        <Slider
+          value={[styleRatio]}
+          onValueChange={(values) => setStyleRatio(values[0])}
+          min={0}
+          max={100}
+          step={1}
+          className="w-full"
+        />
+      </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Stylization strength</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-xs text-muted-foreground cursor-help">
-                      {styleRatio}%
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      This parameter affects the stylization strength. The higher the value,
-                      the stronger the stylization. This is done via interpolation between
-                      the style vectors of the content and style images.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <Slider
-              value={[styleRatio]}
-              onValueChange={(values) => setStyleRatio(values[0])}
-              min={0}
-              max={100}
-              step={1}
-              className="w-full"
-            />
-          </div>
-        </CardContent>
-      </Card>
-        </motion.div>
-      ) : (
-        <Card className="backdrop-blur-sm bg-card/50">
-        <CardContent className="p-6 space-y-4">
-          <div className="aspect-video bg-gradient-to-br from-muted/50 to-transparent rounded-lg overflow-hidden flex items-center justify-center border-2 border-dashed border-muted-foreground/20">
-            <p className="text-muted-foreground">Stylized image will appear here</p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm">Stylization strength</Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-xs text-muted-foreground cursor-help">
-                      {styleRatio}%
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      This parameter affects the stylization strength. The higher the value,
-                      the stronger the stylization. This is done via interpolation between
-                      the style vectors of the content and style images.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <Slider
-              value={[styleRatio]}
-              onValueChange={(values) => setStyleRatio(values[0])}
-              min={0}
-              max={100}
-              step={1}
-              className="w-full"
-            />
-          </div>
-        </CardContent>
-      </Card>
-      )}
-
-      <div className="flex gap-3">
+      <div className="flex gap-3 pt-2">
         <Button
           onClick={handleStylize}
           disabled={isProcessing || !contentImgElement || !styleImgElement}
-          className="flex-1"
+          className="flex-1 bg-foreground text-background hover:bg-foreground/90"
           size="lg"
         >
           {isProcessing ? (
@@ -240,6 +149,6 @@ export function StyleTransfer({ onStylize, isProcessing, progress }: StyleTransf
           <Shuffle className="h-4 w-4" />
         </Button>
       </div>
-    </motion.div>
+    </div>
   );
 }

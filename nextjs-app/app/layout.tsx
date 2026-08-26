@@ -1,12 +1,15 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { DM_Sans } from 'next/font/google' 
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 
-const inter = Inter({ subsets: ['latin'] })
+const dmSans = DM_Sans({ 
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'] 
+})
 
 export const metadata: Metadata = {
-  title: 'Artify AI - TensorFlow.js',
+  title: 'Artify - Style Transfer', 
   description: 'Paint yourself in the style of any painting, right in the browser.',
 }
 
@@ -17,10 +20,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      {/* 4. Apply the new font, make text crisp (antialiased), and enforce your new theme variables */}
+      <body className={`${dmSans.className} antialiased bg-background text-foreground`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
