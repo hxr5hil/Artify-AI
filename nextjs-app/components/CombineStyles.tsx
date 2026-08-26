@@ -17,7 +17,7 @@ interface CombineStylesProps {
     styleDim: number
   ) => Promise<ImageData>;
   onOutputGenerated: (imageData: ImageData) => void;
-  isProcessing: boolean;
+  isProcessing: boolean;  
   progress: string;
 }
 
@@ -86,7 +86,6 @@ export function CombineStyles({
     }
   };
 
-  // Real-time auto-restylize on slider/image changes after first manual generation
   useEffect(() => {
     if (!hasOutput || isProcessing) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
